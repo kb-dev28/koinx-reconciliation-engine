@@ -1,0 +1,59 @@
+{
+  "info": {
+    "_postman_id": "45bb01f8-7b92-49ec-b557-8ee7083721fa",
+    "name": "New Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "55323943",
+    "_collection_link": "https://go.postman.co/collection/55323943-45bb01f8-7b92-49ec-b557-8ee7083721fa?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "KoinX Reconciliation Engine",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:3000/reconcile",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "reconcile"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Descargar Reporte",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/report/e22c5369-2299-4d88-a0c2-fde885654581",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "report",
+            "e22c5369-2299-4d88-a0c2-fde885654581"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
