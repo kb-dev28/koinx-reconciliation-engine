@@ -28,6 +28,46 @@ curl -s -X POST http://localhost:3000/reconcile \
 curl -s "http://localhost:3000/report/<RUN_ID>" -o reconciliation-report.csv
 ```
 
+**Prefer Postman?** See [Testing with Postman](#testing-with-postman) — a collection is included in the repo root and has been used to verify the API end-to-end.
+
+---
+
+## Testing with Postman
+
+The repo includes a ready-made collection:
+
+**`KoinX_Reconciliation.postman_collection.json`**
+
+### Import
+
+1. Open [Postman](https://www.postman.com/downloads/)
+2. **Import** → **Upload Files** → select `KoinX_Reconciliation.postman_collection.json` from the project root
+3. Ensure the server is running: `npm start`
+
+### Collection variables
+
+| Variable | Default | Use |
+|---|---|---|
+| `baseUrl` | `http://localhost:3000` | API base URL (change if you use another `PORT`) |
+| `runId` | *(empty)* | Paste the `runId` from **POST Reconcile** before calling report requests |
+
+To edit variables: select the collection → **Variables** tab.
+
+### Suggested flow
+
+1. **Health** — confirm the server is up (`{ "ok": true }`)
+2. **POST Reconcile** — body `{}` uses demo CSVs in `samples/`; copy `runId` from the response
+3. Set the collection variable **`runId`** to that value
+4. **GET Report (CSV)** — full report (also written to `outputs/`)
+5. **GET Summary** — JSON counts (`matched`, `conflicting`, `unmatchedUser`, `unmatchedExchange`)
+6. **GET Unmatched** — rows with no counterpart and reasons
+
+If `runId` does not exist in the database, report endpoints return **404**:
+
+```json
+{ "error": "No transactions found for runId: <runId>" }
+```
+
 ---
 
 ## Prerequisites
@@ -133,6 +173,7 @@ Each row in the CSV includes:
 ## Folder Layout
 
 ```
+├── KoinX_Reconciliation.postman_collection.json   # Postman requests (import to test the API)
 ├── config/
 │   ├── assetAliases.json       # maps messy CSV labels to canonical symbols (e.g. "bitcoin" → "BTC", "Ethereum" → "ETH")
 │   └── csvHeaderAliases.json   # tolerates non-standard CSV column names
@@ -209,6 +250,7 @@ Each reconciliation run gets an isolated UUID. This means the same CSVs can be r
 | Command | Description |
 |---|---|
 | `npm start` | Start the API server |
+| `npm test` | Run unit tests (`node:test`, no extra dependencies) |
 
 ---
 

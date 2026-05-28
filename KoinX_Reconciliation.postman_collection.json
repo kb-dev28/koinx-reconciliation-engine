@@ -1,17 +1,40 @@
 {
   "info": {
     "_postman_id": "45bb01f8-7b92-49ec-b557-8ee7083721fa",
-    "name": "New Collection",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "55323943",
-    "_collection_link": "https://go.postman.co/collection/55323943-45bb01f8-7b92-49ec-b557-8ee7083721fa?source=collection_link"
+    "name": "KoinX Reconciliation Engine",
+    "description": "API collection for the KoinX reconciliation engine. Start the server (`npm start`), run **POST Reconcile**, then copy `runId` into the collection variable before calling the report endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "description": "Paste here the runId returned by POST /reconcile"
+    }
+  ],
   "item": [
     {
-      "name": "KoinX Reconciliation Engine",
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "POST Reconcile",
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{}",
@@ -21,39 +44,34 @@
             }
           }
         },
-        "url": {
-          "raw": "http://localhost:3000/reconcile",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "3000",
-          "path": [
-            "reconcile"
-          ]
-        }
-      },
-      "response": []
+        "url": "{{baseUrl}}/reconcile",
+        "description": "Runs ingestion + matching using default CSVs in `samples/`. Copy `runId` from the response into the `runId` collection variable."
+      }
     },
     {
-      "name": "Descargar Reporte",
+      "name": "GET Report (CSV)",
       "request": {
         "method": "GET",
         "header": [],
-        "url": {
-          "raw": "http://localhost:3000/report/e22c5369-2299-4d88-a0c2-fde885654581",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "3000",
-          "path": [
-            "report",
-            "e22c5369-2299-4d88-a0c2-fde885654581"
-          ]
-        }
-      },
-      "response": []
+        "url": "{{baseUrl}}/report/{{runId}}",
+        "description": "Downloads the full reconciliation report as CSV."
+      }
+    },
+    {
+      "name": "GET Summary",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/report/{{runId}}/summary"
+      }
+    },
+    {
+      "name": "GET Unmatched",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/report/{{runId}}/unmatched"
+      }
     }
   ]
 }
