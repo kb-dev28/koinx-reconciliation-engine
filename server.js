@@ -57,7 +57,8 @@ async function start() {
   app.get('/report/:runId', async (req, res) => {
     try {
       const { runId } = req.params;
-      const csv = await generateReportCsv(runId);
+      const { csv, outputPath } = await generateReportCsv(runId);
+      logger.info('GET /report/:runId completed', { runId, outputPath });
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader(
         'Content-Disposition',

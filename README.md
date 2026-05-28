@@ -1,8 +1,34 @@
 # KoinX — Transaction Reconciliation Engine
 
-Backend service that ingests **user** and **exchange** transaction CSVs, matches rows across sources with configurable tolerances, and produces an **audit-friendly CSV report** suitable for Excel.
+Backend service that ingests **user** and **exchange** transaction CSVs, matches rows across sources with configurable tolerances, and produces an **audit-friendly CSV report** (Excel-ready).
 
-Built for the KoinX backend take-home assignment.
+**Plug & play:** clone, configure `.env`, run `npm start`, call `POST /reconcile` — demo CSVs are already in `samples/`.
+
+---
+
+## Quick start (evaluator-friendly)
+
+```bash
+# 1) Install
+npm install
+
+# 2) Configure MongoDB
+cp .env.example .env
+# Edit .env → set MONGO_URI
+
+# 3) Start API
+npm run start
+
+# 4) Run reconciliation (uses samples/*.csv by default)
+curl -s -X POST http://localhost:3000/reconcile \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# 5) Copy runId from response, then download report
+curl -s "http://localhost:3000/report/<RUN_ID>" -o reconciliation-report.csv
+```
+
+Reports are also saved under `outputs/reconciliation-report-<RUN_ID>.csv`.
 
 ---
 
@@ -11,139 +37,104 @@ Built for the KoinX backend take-home assignment.
 ```mermaid
 flowchart LR
   subgraph Input
-    U[user_transactions.csv]
-    E[exchange_transactions.csv]
+    S[samples/user_transactions.csv]
+    E[samples/exchange_transactions.csv]
+    D[data/ optional custom CSVs]
   end
 
   subgraph API
-    S[server.js]
+    API[server.js]
   end
 
   subgraph Services
-    I[ingestionService.js<br/>Part 1: Ingestion]
-    M[matchingService.js<br/>Part 2: Matching]
-    R[reconcileService.js<br/>Part 3: Report + Orchestration]
+    I[ingestionService.js<br/>Part 1]
+    M[matchingService.js<br/>Part 2]
+    R[reconcileService.js<br/>Part 3 + orchestration]
   end
 
   subgraph Storage
-    DB[(MongoDB<br/>Transaction collection)]
+    DB[(MongoDB)]
+    OUT[outputs/*.csv]
   end
 
-  subgraph Config
-    HA[csvHeaderAliases.json]
-    AA[assetAliases.json]
-    ENV[.env tolerances]
-  end
-
-  U --> S
-  E --> S
-  S -->|POST /reconcile| R
-  R --> I
-  I --> DB
-  R --> M
-  M --> DB
-  R -->|GET /report/:runId| CSV[Reconciliation Report CSV]
-
-  HA -.-> I
-  AA -.-> I
-  ENV -.-> M
+  S --> API
+  E --> API
+  D -. optional body paths .-> API
+  API -->|POST /reconcile| R
+  R --> I --> DB
+  R --> M --> DB
+  API -->|GET /report/:runId| R
+  R --> OUT
 ```
 
-### Data flow (one reconciliation run)
+### Pipeline (one `runId`)
 
-1. **`POST /reconcile`** creates a `runId` (UUID) and ingests both CSVs.
-2. **Ingestion** normalizes fields, flags invalid rows (never dropped), stores `rawRow` for audit.
-3. **Matching** pairs user ↔ exchange using timestamp/quantity tolerances and type/asset rules.
-4. **Report** reads MongoDB state and exports a structured CSV with categories + original rows.
+1. **Ingestion** — parse CSV, normalize, flag invalid rows (never dropped), store `rawRow`.
+2. **Matching** — pair user ↔ exchange (tolerances + type/asset rules).
+3. **Report** — export CSV with categories, reasons, and original row JSON (UTF-8 BOM for Excel).
 
 ---
 
-## Project structure
+## Folder layout
 
-| Path | Responsibility |
-|------|----------------|
-| `services/ingestionService.js` | **Part 1** — parse CSV, validate, persist |
-| `services/matchingService.js` | **Part 2** — matching algorithm + status updates |
-| `services/reconcileService.js` | **Part 3** — orchestration + CSV report + summary helpers |
-| `server.js` | **Part 4** — REST API (thin layer) |
-| `models/Transaction.js` | Mongoose schema |
-| `config/assetAliases.json` | Asset synonym mapping (e.g. `BITCOIN` → `BTC`) |
-| `config/csvHeaderAliases.json` | CSV header synonym mapping |
-| `data/` | **Local input folder** (CSVs not committed — see below) |
-| `logger.js` | Structured console logging |
+| Folder | In Git | Purpose |
+|--------|--------|---------|
+| `samples/` | Yes (with CSVs) | **Default demo input** — plug & play |
+| `data/` | Empty (`.gitkeep` only) | Optional folder if you want your own CSVs |
+| `outputs/` | Empty (`.gitkeep` only) | **Auto-created** — generated reports |
+| `config/` | Yes | Header + asset aliases |
+| `services/` | Yes | Core business logic |
+| `docs/internal/` | Ignored | Local notes (not submitted) |
+
+### Input path resolution
+
+When `POST /reconcile` **does not** include paths:
+
+- `samples/user_transactions.csv`
+- `samples/exchange_transactions.csv`
+
+Paths are built with `path.join(__dirname, ...)` for **Windows / Linux / macOS** compatibility.
+
+Optional body override:
+
+```json
+{
+  "userCsvPath": "data/my_user.csv",
+  "exchangeCsvPath": "data/my_exchange.csv"
+}
+```
 
 ---
 
 ## Prerequisites
 
-- **Node.js** 18+ (tested on 22.x)
-- **MongoDB** (Atlas or local)
-- CSV files placed under `data/` (see [data/README.md](data/README.md))
+- Node.js **18+**
+- MongoDB (Atlas or local)
 
 ---
 
-## Setup
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Environment variables
-
-Copy `.env.example` to `.env`:
-
-```bash
-cp .env.example .env
-```
+## Environment variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `MONGO_URI` | Yes | — | MongoDB connection string |
 | `PORT` | No | `3000` | HTTP port |
-| `TIMESTAMP_TOLERANCE_SECONDS` | No | `300` | ± window for timestamp matching |
-| `QUANTITY_TOLERANCE_PCT` | No | `0.01` | Quantity tolerance in **percent** (0.01 = 0.01%) |
-
-### 3. Add input CSVs (important for reviewers)
-
-**Sample CSVs from the assignment are not committed to this repo.**
-
-Place your files here:
-
-```
-data/user_transactions.csv
-data/exchange_transactions.csv
-```
-
-Or pass custom paths in `POST /reconcile` body (`userCsvPath`, `exchangeCsvPath`).
-
-See [data/README.md](data/README.md) for expected columns.
-
-### 4. Start the server
-
-```bash
-npm run start
-```
-
-Example log output:
-
-```text
-[2026-05-28T12:00:00.000Z] [INFO] Connected to MongoDB {"database":"test"}
-[2026-05-28T12:00:00.100Z] [INFO] API listening {"url":"http://localhost:3000",...}
-```
+| `TIMESTAMP_TOLERANCE_SECONDS` | No | `300` | ± seconds for timestamp match |
+| `QUANTITY_TOLERANCE_PCT` | No | `0.01` | Quantity tolerance in **percent** |
 
 ---
 
-## API
+## API reference
 
-### Health check
+Base URL: `http://localhost:3000`
+
+### Health
 
 ```bash
 curl -s http://localhost:3000/health
 ```
 
-### Run reconciliation (ingest + match)
+### Run reconciliation
 
 ```bash
 curl -s -X POST http://localhost:3000/reconcile \
@@ -151,43 +142,30 @@ curl -s -X POST http://localhost:3000/reconcile \
   -d '{}'
 ```
 
-Optional body overrides:
+With tolerance overrides:
 
 ```bash
 curl -s -X POST http://localhost:3000/reconcile \
   -H "Content-Type: application/json" \
   -d '{
     "timestampToleranceSeconds": 300,
-    "quantityTolerancePct": 0.01,
-    "userCsvPath": "data/user_transactions.csv",
-    "exchangeCsvPath": "data/exchange_transactions.csv"
+    "quantityTolerancePct": 0.01
   }'
 ```
 
-Response includes `runId`, ingestion stats, and matching summary (pair counts).
-
-### Download full report (CSV)
+### Full report (CSV download + file on disk)
 
 ```bash
 curl -s "http://localhost:3000/report/<RUN_ID>" -o reconciliation-report.csv
 ```
 
-The CSV includes:
+Also written to: `outputs/reconciliation-report-<RUN_ID>.csv`
 
-- `category` — Matched / Conflicting / Unmatched (User only) / Unmatched (Exchange only)
-- `reason` — human-readable explanation
-- Normalized user/exchange fields
-- `user_original_row_json` / `exchange_original_row_json` — **RFC 4180 escaped** JSON for Excel
-
-> **Excel tip:** The file includes a UTF-8 BOM and quoted JSON columns so Excel opens rows correctly.
-
-### Summary counts
+### Summary counts (pairs)
 
 ```bash
 curl -s "http://localhost:3000/report/<RUN_ID>/summary"
 ```
-
-Counts are reported **per pair** (user-side perspective) to align with `POST /reconcile` matching summary.
 
 ### Unmatched rows only
 
@@ -197,76 +175,54 @@ curl -s "http://localhost:3000/report/<RUN_ID>/unmatched"
 
 ---
 
-## Design decisions
+## Report format (auditor-friendly)
 
-### Why UUID `runId`?
+CSV columns include:
 
-- Each reconciliation run is isolated (`runId` indexed in MongoDB).
-- Safe for concurrent runs and re-runs without mixing datasets.
-- Standard, collision-resistant identifier for audit trails.
+- `category` — Matched / Conflicting / Unmatched (User only) / Unmatched (Exchange only)
+- `reason` — explanation
+- Normalized user & exchange fields
+- `user_original_row_json` / `exchange_original_row_json` — **RFC 4180 escaped** for Excel
 
-### Why MongoDB?
-
-- Flexible schema for messy CSV rows (`rawRow`, `errorReason`, reconciliation metadata).
-- Fast filtering by `runId` + `reconciliationStatus` for reports.
-- Fits the assignment preference and scales to larger ingests with indexes.
-
-### `bitcoin` vs `BTC` (asset aliases)
-
-This is **not ISO 20022**. ISO 20022 is a financial messaging standard; this project deals with **messy export labels** in CSVs.
-
-Approach:
-
-- Normalize assets to uppercase at ingestion.
-- Resolve synonyms via **`config/assetAliases.json`** (e.g. `BITCOIN` → `BTC`).
-- Matching compares canonical symbols (`u.asset === e.asset`).
-
-New aliases can be added without code changes.
-
-### Invalid rows are never dropped
-
-Per assignment requirements, bad rows are stored with:
-
-- `isValid: false`
-- `errorReason` (e.g. invalid timestamp, negative quantity)
-
-They still appear in the CSV report for auditors.
-
-### Matching rules (high level)
-
-| Rule | Behavior |
-|------|----------|
-| Asset | Must match after alias normalization |
-| Type | Exact match, or `TRANSFER_OUT` ↔ `TRANSFER_IN` |
-| Timestamp | Within ± `TIMESTAMP_TOLERANCE_SECONDS` |
-| Quantity | Within ± `QUANTITY_TOLERANCE_PCT` |
-| Tie-break | Closest timestamp, then closest quantity |
-| One-to-one | Each exchange row matches at most one user row |
-
-### CSV report for auditors
-
-Counters and finance/ops users often prefer **filterable CSV** over non-exportable charts.
-
-The report stores original CSV payloads as escaped JSON so reviewers can trace decisions back to source data in Excel.
-
-### Logging
-
-Lightweight structured logs via `logger.js` (no extra dependencies):
-
-```text
-[ISO_TIMESTAMP] [LEVEL] message {"optional":"metadata"}
-```
+UTF-8 **BOM** is included so Excel opens the file correctly on Windows.
 
 ---
 
-## Example categories in the report
+## Design decisions
 
-| Category | Meaning |
-|----------|---------|
-| **Matched** | Pair found within tolerances |
-| **Conflicting** | Candidate found by proximity, but quantity outside tolerance |
-| **Unmatched (User only)** | No exchange counterpart (includes invalid ingestion rows) |
-| **Unmatched (Exchange only)** | No user counterpart |
+### UUID `runId`
+
+Isolates each reconciliation run in MongoDB; safe for concurrent executions and audit trails.
+
+### MongoDB
+
+Flexible schema for messy data (`rawRow`, `errorReason`, reconciliation metadata) and efficient filtering by `runId`.
+
+### Asset aliases (`bitcoin` → `BTC`)
+
+Not ISO 20022 — this handles **messy export labels** in CSVs via `config/assetAliases.json` (extensible without code changes).
+
+### Invalid rows
+
+Never dropped. Stored with `isValid: false` and `errorReason`; included in the CSV report.
+
+### Matching highlights
+
+| Rule | Behavior |
+|------|----------|
+| Asset | Match after alias normalization |
+| Type | Exact or `TRANSFER_OUT` ↔ `TRANSFER_IN` |
+| Timestamp | Within ± configured seconds |
+| Quantity | Within ± configured percent |
+| Tie-break | Closest time, then closest quantity |
+
+### Logging
+
+Structured logs via `logger.js`:
+
+```text
+[2026-05-28T12:00:00.000Z] [INFO] Reconciliation run started {"runId":"...","userCsvPath":"..."}
+```
 
 ---
 
@@ -274,7 +230,7 @@ Lightweight structured logs via `logger.js` (no extra dependencies):
 
 | Command | Description |
 |---------|-------------|
-| `npm run start` | Start API server |
+| `npm run start` | Start the API server |
 
 ---
 

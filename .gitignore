@@ -4,9 +4,11 @@ package-lock.json
 docs/internal
 report.csv
 
-# Ignore uploaded CSVs; keep folder docs for reviewers
-data/*
-!data/README.md
-!data/.gitkeep
+# Generated reports (folder is kept via .gitkeep)
+outputs/*
+!outputs/.gitkeep
 
-data/
+# Optional user uploads (empty by default)
+data/*
+!data/.gitkeep
+!data/README.md

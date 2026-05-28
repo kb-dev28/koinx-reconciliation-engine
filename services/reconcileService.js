@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -6,8 +7,40 @@ const logger = require('../logger');
 const { processCSV } = require('./ingestionService');
 const { matchRun } = require('./matchingService');
 
+const PROJECT_ROOT = path.join(__dirname, '..');
+const SAMPLES_DIR = path.join(PROJECT_ROOT, 'samples');
+const OUTPUTS_DIR = path.join(PROJECT_ROOT, 'outputs');
+
+const DEFAULT_USER_CSV = path.join(SAMPLES_DIR, 'user_transactions.csv');
+const DEFAULT_EXCHANGE_CSV = path.join(SAMPLES_DIR, 'exchange_transactions.csv');
+
 function createRunId() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
+}
+
+/**
+ * Path priority when POST body omits paths:
+ * 1) Explicit body paths (resolved for cross-platform)
+ * 2) Default demo files under samples/
+ */
+function resolveInputPaths(userCsvPath, exchangeCsvPath) {
+  return {
+    userCsvPath: userCsvPath ? path.resolve(userCsvPath) : DEFAULT_USER_CSV,
+    exchangeCsvPath: exchangeCsvPath ? path.resolve(exchangeCsvPath) : DEFAULT_EXCHANGE_CSV,
+  };
+}
+
+function assertCsvExists(filePath, label) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`${label} not found at path: ${filePath}`);
+  }
+}
+
+function ensureOutputsDir() {
+  if (!fs.existsSync(OUTPUTS_DIR)) {
+    fs.mkdirSync(OUTPUTS_DIR, { recursive: true });
+    logger.info('Created outputs directory', { path: OUTPUTS_DIR });
+  }
 }
 
 /**
@@ -16,12 +49,27 @@ function createRunId() {
  */
 async function reconcileRun({
   runId = createRunId(),
-  userCsvPath = path.join(process.cwd(), 'data', 'user_transactions.csv'),
-  exchangeCsvPath = path.join(process.cwd(), 'data', 'exchange_transactions.csv'),
+  userCsvPath,
+  exchangeCsvPath,
   timestampToleranceSeconds,
   quantityTolerancePct,
 } = {}) {
-  logger.info('Reconciliation run started', { runId, userCsvPath, exchangeCsvPath });
+  const paths = resolveInputPaths(userCsvPath, exchangeCsvPath);
+  userCsvPath = paths.userCsvPath;
+  exchangeCsvPath = paths.exchangeCsvPath;
+
+  assertCsvExists(userCsvPath, 'User CSV');
+  assertCsvExists(exchangeCsvPath, 'Exchange CSV');
+
+  logger.info('Reconciliation run started', {
+    runId,
+    userCsvPath,
+    exchangeCsvPath,
+    inputSource:
+      path.normalize(userCsvPath).toLowerCase().includes(`${path.sep}samples${path.sep}`)
+        ? 'samples (default)'
+        : 'custom path',
+  });
 
   const [user, exchange] = await Promise.all([
     processCSV(userCsvPath, 'user', runId),
@@ -98,8 +146,8 @@ function buildRow({ category, reason, userTx, exchangeTx }) {
     .join(',');
 }
 
-async function generateReportCsv(runId) {
-  if (!runId) throw new Error('generateReportCsv: runId is required');
+async function buildReportCsvContent(runId) {
+  if (!runId) throw new Error('buildReportCsvContent: runId is required');
 
   const txs = await Transaction.find({ runId })
     .select('_id source externalId rawRow timestamp type asset quantity isValid errorReason reconciliationStatus matchedWith reconciliationReason')
@@ -198,6 +246,23 @@ async function generateReportCsv(runId) {
   return `\uFEFF${lines.join('\r\n')}`;
 }
 
+/**
+ * Builds the report, writes it to outputs/, and returns content + file path.
+ */
+async function generateReportCsv(runId) {
+  logger.info('Generating reconciliation report', { runId });
+
+  const csv = await buildReportCsvContent(runId);
+
+  ensureOutputsDir();
+  const outputPath = path.join(OUTPUTS_DIR, `reconciliation-report-${runId}.csv`);
+  fs.writeFileSync(outputPath, csv, 'utf8');
+
+  logger.info('Reconciliation report saved', { runId, outputPath });
+
+  return { csv, outputPath };
+}
+
 async function getReportSummary(runId) {
   if (!runId) throw new Error('getReportSummary: runId is required');
 
@@ -257,7 +322,12 @@ async function getUnmatchedRows(runId) {
 module.exports = {
   reconcileRun,
   generateReportCsv,
+  buildReportCsvContent,
   getReportSummary,
   getUnmatchedRows,
+  resolveInputPaths,
+  DEFAULT_USER_CSV,
+  DEFAULT_EXCHANGE_CSV,
+  OUTPUTS_DIR,
 };
 
