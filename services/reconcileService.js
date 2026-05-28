@@ -319,12 +319,17 @@ async function getUnmatchedRows(runId) {
   };
 }
 
+async function runExists(runId) {
+  return !!(await Transaction.exists({ runId }));
+}
+
 module.exports = {
   reconcileRun,
   generateReportCsv,
   buildReportCsvContent,
   getReportSummary,
   getUnmatchedRows,
+  runExists,
   ensureOutputsDir,
   resolveInputPaths,
   DEFAULT_USER_CSV,

@@ -8,6 +8,7 @@ const {
   generateReportCsv,
   getReportSummary,
   getUnmatchedRows,
+  runExists,
   ensureOutputsDir,
 } = require('./services/reconcileService');
 
@@ -58,6 +59,9 @@ async function start() {
   app.get('/report/:runId', async (req, res) => {
     try {
       const { runId } = req.params;
+      if (!(await runExists(runId))) {
+        return res.status(404).json({ error: `No transactions found for runId: ${runId}` });
+      }
       const { csv, outputPath } = await generateReportCsv(runId);
       logger.info('GET /report/:runId completed', { runId, outputPath });
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -75,6 +79,9 @@ async function start() {
   app.get('/report/:runId/summary', async (req, res) => {
     try {
       const { runId } = req.params;
+      if (!(await runExists(runId))) {
+        return res.status(404).json({ error: `No transactions found for runId: ${runId}` });
+      }
       const summary = await getReportSummary(runId);
       res.status(200).json(summary);
     } catch (err) {
@@ -86,6 +93,9 @@ async function start() {
   app.get('/report/:runId/unmatched', async (req, res) => {
     try {
       const { runId } = req.params;
+      if (!(await runExists(runId))) {
+        return res.status(404).json({ error: `No transactions found for runId: ${runId}` });
+      }
       const unmatched = await getUnmatchedRows(runId);
       res.status(200).json(unmatched);
     } catch (err) {
