@@ -1,6 +1,6 @@
 const fs = require('fs');
 const csv = require('csv-parser');
-const Transaction = require('../models/Transaction');
+const Transaction = require('../models/transaction');
 const logger = require('../logger');
 const csvHeaderAliases = require('../config/csvHeaderAliases.json');
 const assetAliases = require('../config/assetAliases.json');

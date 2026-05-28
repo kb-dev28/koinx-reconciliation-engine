@@ -1,4 +1,4 @@
-const Transaction = require('../models/Transaction');
+const Transaction = require('../models/transaction');
 const assetAliases = require('../config/assetAliases.json');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

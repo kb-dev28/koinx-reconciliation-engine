@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const Transaction = require('../models/Transaction');
+const Transaction = require('../models/transaction');
 const logger = require('../logger');
 const { processCSV } = require('./ingestionService');
 const { matchRun } = require('./matchingService');
