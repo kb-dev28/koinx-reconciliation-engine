@@ -11,6 +11,12 @@ const transactionSchema = new mongoose.Schema({
   // Raw ID from the CSV. Not globally unique — may be absent or collide across sources/runs.
   externalId: { type: String, default: null, trim: true },
 
+  /**
+   * Original CSV row as ingested (raw headers/values).
+   * Stored to generate audit-friendly reports that can include original rows from both sources.
+   */
+  rawRow: { type: mongoose.Schema.Types.Mixed, default: null },
+
   // Parsed at ingestion time and stored as Date.
   timestamp: { type: Date, default: null, index: true },
 

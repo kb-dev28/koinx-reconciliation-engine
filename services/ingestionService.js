@@ -81,6 +81,7 @@ const processCSV = async (filePath, source, runId) => {
           runId,
           source, // 'user' | 'exchange'
           externalId,
+          rawRow: data,
           timestamp,
           type,
           asset,
