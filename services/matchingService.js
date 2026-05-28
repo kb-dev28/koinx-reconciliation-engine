@@ -54,7 +54,8 @@ const withinQuantityTolerance = (uQty, eQty, tolerancePct) => {
   if (uQty == null || eQty == null) return false;
   if (!Number.isFinite(uQty) || !Number.isFinite(eQty)) return false;
   const diff = Math.abs(uQty - eQty);
-  const scale = Math.max(Math.abs(uQty), Math.abs(eQty), 1); // avoid division by zero
+  const scale = Math.max(Math.abs(uQty), Math.abs(eQty));
+  if (scale === 0) return diff === 0;
   return diff <= scale * (tolerancePct / 100);
 };
 
@@ -90,6 +91,13 @@ async function matchRun({
   sortByTime(bySource.user);
   sortByTime(bySource.exchange);
 
+  const exchangeByAsset = new Map();
+  for (const e of bySource.exchange) {
+    const list = exchangeByAsset.get(e.asset);
+    if (list) list.push(e);
+    else exchangeByAsset.set(e.asset, [e]);
+  }
+
   // Prevent an exchange transaction from matching multiple user transactions.
   const usedExchangeIds = new Set();
   const updates = [];
@@ -111,9 +119,8 @@ async function matchRun({
     let bestMatch    = null, bestMatchScore    = Infinity;
     let bestConflict = null, bestConflictScore = Infinity;
 
-    for (const e of bySource.exchange) {
+    for (const e of exchangeByAsset.get(u.asset) || []) {
       if (usedExchangeIds.has(String(e._id))) continue;
-      if (u.asset !== e.asset) continue;
       if (!isTypeCompatible(u.type, e.type)) continue;
       if (!withinTimestampTolerance(uTs, e.timestamp, timestampToleranceSeconds)) continue;
 
@@ -166,4 +173,12 @@ async function matchRun({
   return { runId, config: { timestampToleranceSeconds, quantityTolerancePct }, summary };
 }
 
-module.exports = { matchRun, normaliseString, normaliseAsset, normaliseType };
+module.exports = {
+  matchRun,
+  normaliseString,
+  normaliseAsset,
+  normaliseType,
+  isTypeCompatible,
+  withinQuantityTolerance,
+  withinTimestampTolerance,
+};

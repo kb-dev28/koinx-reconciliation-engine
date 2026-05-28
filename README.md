@@ -48,6 +48,12 @@ curl -s "http://localhost:3000/report/<RUN_ID>" -o reconciliation-report.csv
 
 ---
 
+## How a run works
+
+When you call `POST /reconcile`, the response includes a `runId` (UUID). That identifier groups every transaction ingested and matched in that execution. Use the same `runId` in all subsequent report endpoints — for example `GET /report/:runId`, `GET /report/:runId/summary`, and `GET /report/:runId/unmatched`.
+
+---
+
 ## API Reference
 
 Base URL: `http://localhost:3000`
@@ -65,24 +71,9 @@ POST /reconcile
 Content-Type: application/json
 ```
 
-Default run (uses `samples/*.csv`):
-```bash
-curl -s -X POST http://localhost:3000/reconcile \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
+Tolerance values can also be overridden per-request via the request body (`timestampToleranceSeconds`, `quantityTolerancePct`).
 
-With custom tolerances or file paths:
-```bash
-curl -s -X POST http://localhost:3000/reconcile \
-  -H "Content-Type: application/json" \
-  -d '{
-    "timestampToleranceSeconds": 60,
-    "quantityTolerancePct": 0.05,
-    "userCsvPath": "data/my_user.csv",
-    "exchangeCsvPath": "data/my_exchange.csv"
-  }'
-```
+Optional body fields: `userCsvPath`, `exchangeCsvPath`, `timestampToleranceSeconds`, `quantityTolerancePct`.
 
 Response:
 ```json
@@ -94,6 +85,7 @@ Response:
     "unmatchedUser": 3,
     "unmatchedExchange": 2
   }
+  // values depend on the input CSVs
 }
 ```
 
@@ -142,7 +134,7 @@ Each row in the CSV includes:
 
 ```
 ├── config/
-│   ├── assetAliases.json       # e.g. "bitcoin" → "BTC"
+│   ├── assetAliases.json       # maps messy CSV labels to canonical symbols (e.g. "bitcoin" → "BTC", "Ethereum" → "ETH")
 │   └── csvHeaderAliases.json   # tolerates non-standard CSV column names
 ├── data/                       # optional — place custom CSVs here
 ├── outputs/                    # auto-created — generated reports go here
@@ -159,6 +151,8 @@ Each row in the CSV includes:
 
 ## Architecture
 
+One `runId` (UUID) ties all records from a single execution together, making runs isolated and safe for concurrent use.
+
 ```
 POST /reconcile
       │
@@ -169,8 +163,6 @@ reconcileService ──► ingestionService  →  MongoDB  (both CSVs stored)
       │
       └──────────► generateReportCsv  →  outputs/*.csv
 ```
-
-One `runId` (UUID) ties all records from a single execution together, making runs isolated and safe for concurrent use.
 
 ---
 
