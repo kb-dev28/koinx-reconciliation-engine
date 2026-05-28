@@ -45,6 +45,19 @@ function normaliseType(raw) {
 }
 
 const processCSV = async (filePath, source, runId) => {
+  // Track externalIds already stored for this run + source (MongoDB + current batch).
+  const existingRows = await Transaction.find({
+    runId,
+    source,
+    externalId: { $ne: null },
+  })
+    .select('externalId')
+    .lean();
+
+  const seenExternalIds = new Set(
+    existingRows.map((row) => row.externalId).filter(Boolean),
+  );
+
   const results = [];
 
   return new Promise((resolve, reject) => {
@@ -72,9 +85,9 @@ const processCSV = async (filePath, source, runId) => {
         if (quantity === null) {
           isValid = false;
           reasons.push('Invalid quantity');
-        } else if (quantity < 0) {
+        } else if (quantity <= 0) {
           isValid = false;
-          reasons.push('Negative quantity');
+          reasons.push('Quantity must be greater than zero');
         }
 
         // Timestamp
@@ -93,6 +106,16 @@ const processCSV = async (filePath, source, runId) => {
         if (!asset) {
           isValid = false;
           reasons.push('Missing asset');
+        }
+
+        // Duplicate detection: same externalId + source within the same runId.
+        if (externalId) {
+          if (seenExternalIds.has(externalId)) {
+            isValid = false;
+            reasons.push('Duplicate externalId');
+          } else {
+            seenExternalIds.add(externalId);
+          }
         }
 
         // Persist the row regardless of validity, with explicit error reasons.
@@ -114,10 +137,14 @@ const processCSV = async (filePath, source, runId) => {
           // Bulk insert for efficiency; keep going on per-document errors.
           await Transaction.insertMany(results, { ordered: false });
           const invalidCount = results.reduce((acc, row) => acc + (row.isValid ? 0 : 1), 0);
+          const duplicateCount = results.filter((row) =>
+            row.errorReason?.includes('Duplicate externalId'),
+          ).length;
           const stats = {
             totalRows: results.length,
             invalidRows: invalidCount,
             validRows: results.length - invalidCount,
+            duplicateRows: duplicateCount,
           };
           logger.info('CSV ingestion finished', { runId, source, filePath, ...stats });
           resolve(stats);

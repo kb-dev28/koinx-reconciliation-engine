@@ -325,6 +325,7 @@ module.exports = {
   buildReportCsvContent,
   getReportSummary,
   getUnmatchedRows,
+  ensureOutputsDir,
   resolveInputPaths,
   DEFAULT_USER_CSV,
   DEFAULT_EXCHANGE_CSV,

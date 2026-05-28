@@ -8,6 +8,7 @@ const {
   generateReportCsv,
   getReportSummary,
   getUnmatchedRows,
+  ensureOutputsDir,
 } = require('./services/reconcileService');
 
 const uri = process.env.MONGO_URI;
@@ -91,6 +92,8 @@ async function start() {
       res.status(500).json({ error: err?.message || 'Unknown error' });
     }
   });
+
+  ensureOutputsDir();
 
   app.listen(PORT, () => {
     logger.info('API listening', {
