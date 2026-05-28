@@ -2,29 +2,35 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 
-const { generateReportCsv } = require('./services/reportService');
-const { reconcileRun } = require('./services/reconcileService');
+const logger = require('./logger');
+const {
+  reconcileRun,
+  generateReportCsv,
+  getReportSummary,
+  getUnmatchedRows,
+} = require('./services/reconcileService');
 
 const uri = process.env.MONGO_URI;
 const PORT = Number.parseInt(process.env.PORT || '3000', 10);
 
 if (!uri) {
-  // Fail fast to make misconfiguration obvious during review.
   throw new Error('Missing required env var: MONGO_URI');
 }
 
 async function start() {
   await mongoose.connect(uri);
-  console.log('✅ Connected to MongoDB');
-  console.log(`Database: ${mongoose.connection.name}`);
+  logger.info('Connected to MongoDB', { database: mongoose.connection.name });
 
   const app = express();
   app.use(express.json());
 
-  // Task 4 (minimal): triggers ingestion for both CSV sources under a single runId.
+  app.get('/health', (req, res) => {
+    res.json({ ok: true });
+  });
+
+  // POST /reconcile — ingestion + matching (optional tolerance overrides in body)
   app.post('/reconcile', async (req, res) => {
     try {
-      // Optional: allow custom CSV paths for testing, while defaulting to /data/*.csv.
       const {
         userCsvPath,
         exchangeCsvPath,
@@ -38,39 +44,68 @@ async function start() {
         timestampToleranceSeconds,
         quantityTolerancePct,
       });
+
+      logger.info('POST /reconcile completed', { runId: result.runId, summary: result.matching?.summary });
       res.status(201).json(result);
     } catch (err) {
+      logger.error('POST /reconcile failed', { message: err?.message });
       res.status(500).json({ error: err?.message || 'Unknown error' });
     }
   });
 
-  app.get('/health', (req, res) => {
-    res.json({ ok: true });
-  });
-
-  // Task 3: generate reconciliation report (CSV) for a run.
+  // GET /report/:runId — full reconciliation report (CSV)
   app.get('/report/:runId', async (req, res) => {
     try {
       const { runId } = req.params;
       const csv = await generateReportCsv(runId);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="reconciliation-report-${runId}.csv"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="reconciliation-report-${runId}.csv"`,
+      );
       res.status(200).send(csv);
     } catch (err) {
       res.status(500).json({ error: err?.message || 'Unknown error' });
     }
   });
 
+  // GET /report/:runId/summary — counts only
+  app.get('/report/:runId/summary', async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const summary = await getReportSummary(runId);
+      res.status(200).json(summary);
+    } catch (err) {
+      res.status(500).json({ error: err?.message || 'Unknown error' });
+    }
+  });
+
+  // GET /report/:runId/unmatched — unmatched rows with reasons
+  app.get('/report/:runId/unmatched', async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const unmatched = await getUnmatchedRows(runId);
+      res.status(200).json(unmatched);
+    } catch (err) {
+      res.status(500).json({ error: err?.message || 'Unknown error' });
+    }
+  });
+
   app.listen(PORT, () => {
-    console.log(`🚀 API listening on http://localhost:${PORT}`);
+    logger.info('API listening', {
+      url: `http://localhost:${PORT}`,
+      endpoints: [
+        'POST /reconcile',
+        'GET /report/:runId',
+        'GET /report/:runId/summary',
+        'GET /report/:runId/unmatched',
+        'GET /health',
+      ],
+    });
   });
 }
 
 start().catch((err) => {
-  console.error('❌ Startup error:', err?.message || err);
+  logger.error('Startup failed', { message: err?.message || String(err) });
   process.exitCode = 1;
 });
-
-
-app.get('/report/:runId/summary', async (req, res) => {});
-app.get('/report/:runId/unmatched', async (req, res) => {});

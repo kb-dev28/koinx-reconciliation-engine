@@ -1,8 +1,9 @@
 const fs = require('fs');
 const csv = require('csv-parser');
 const Transaction = require('../models/Transaction');
+const logger = require('../logger');
 const csvHeaderAliases = require('../config/csvHeaderAliases.json');
-const { normaliseString, normaliseAsset, normaliseType } = require('../utils/normalizers');
+const assetAliases = require('../config/assetAliases.json');
 
 /**
  * CSV headers can vary by source/export and can be messy.
@@ -23,7 +24,25 @@ function pickCanonicalField(row, canonicalKey) {
   return pickField(row, candidates);
 }
 
-// Normalisation helpers live in `utils/normalizers.js` to keep ingestion focused and reusable.
+function normaliseString(value) {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  return s.length ? s : null;
+}
+
+function normaliseAsset(raw) {
+  const asset = normaliseString(raw);
+  if (!asset) return null;
+  const upper = asset.toUpperCase();
+  const mapped = assetAliases[upper];
+  if (mapped) return String(mapped).trim().toUpperCase();
+  return upper;
+}
+
+function normaliseType(raw) {
+  const type = normaliseString(raw);
+  return type ? type.toUpperCase() : null;
+}
 
 const processCSV = async (filePath, source, runId) => {
   const results = [];
@@ -95,11 +114,13 @@ const processCSV = async (filePath, source, runId) => {
           // Bulk insert for efficiency; keep going on per-document errors.
           await Transaction.insertMany(results, { ordered: false });
           const invalidCount = results.reduce((acc, row) => acc + (row.isValid ? 0 : 1), 0);
-          resolve({
+          const stats = {
             totalRows: results.length,
             invalidRows: invalidCount,
             validRows: results.length - invalidCount,
-          });
+          };
+          logger.info('CSV ingestion finished', { runId, source, filePath, ...stats });
+          resolve(stats);
         } catch (error) {
           reject(error);
         }
