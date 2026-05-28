@@ -1,0 +1,7 @@
+{
+  "externalId": ["transaction_id", "Transaction ID", "transactionId", "txid", "TxId"],
+  "timestamp": ["timestamp", "Timestamp", "time", "Time", "datetime", "DateTime"],
+  "type": ["type", "Type", "transaction_type", "Transaction Type"],
+  "asset": ["asset", "Asset", "currency", "Currency", "symbol", "Symbol"],
+  "quantity": ["quantity", "Quantity", "qty", "Qty", "amount", "Amount"]
+}

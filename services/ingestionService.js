@@ -1,7 +1,8 @@
 const fs = require('fs');
 const csv = require('csv-parser');
 const Transaction = require('../models/Transaction');
-const assetAliases = require('../config/assetAliases.json');
+const csvHeaderAliases = require('../config/csvHeaderAliases.json');
+const { normaliseString, normaliseAsset, normaliseType } = require('../utils/normalizers');
 
 /**
  * CSV headers can vary by source/export and can be messy.
@@ -16,28 +17,13 @@ function pickField(row, candidates) {
   return undefined;
 }
 
-function normaliseString(value) {
-  if (value === undefined || value === null) return null;
-  const s = String(value).trim();
-  return s.length ? s : null;
+function pickCanonicalField(row, canonicalKey) {
+  const candidates = csvHeaderAliases?.[canonicalKey];
+  if (!Array.isArray(candidates) || candidates.length === 0) return undefined;
+  return pickField(row, candidates);
 }
 
-function normaliseAsset(raw) {
-  const asset = normaliseString(raw);
-  if (!asset) return null;
-  const upper = asset.toUpperCase();
-
-  // Alias resolution (kept in config to support new datasets without code changes).
-  const mapped = assetAliases[upper];
-  if (mapped) return String(mapped).trim().toUpperCase();
-
-  return upper;
-}
-
-function normaliseType(raw) {
-  const type = normaliseString(raw);
-  return type ? type.toUpperCase() : null;
-}
+// Normalisation helpers live in `utils/normalizers.js` to keep ingestion focused and reusable.
 
 const processCSV = async (filePath, source, runId) => {
   const results = [];
@@ -50,12 +36,12 @@ const processCSV = async (filePath, source, runId) => {
         let isValid = true;
         const reasons = [];
 
-        // Prefer canonical headers (snake_case) but tolerate common variants.
-        const externalIdRaw = pickField(data, ['transaction_id', 'Transaction ID', 'transactionId']);
-        const timestampRaw = pickField(data, ['timestamp', 'Timestamp' ]);
-        const typeRaw = pickField(data, ['type', 'Type']);
-        const assetRaw = pickField(data, ['asset', 'Asset' ]);
-        const quantityRaw = pickField(data, ['quantity', 'Quantity' ]);
+        // Resolve source header variations via config-driven aliases.
+        const externalIdRaw = pickCanonicalField(data, 'externalId');
+        const timestampRaw = pickCanonicalField(data, 'timestamp');
+        const typeRaw = pickCanonicalField(data, 'type');
+        const assetRaw = pickCanonicalField(data, 'asset');
+        const quantityRaw = pickCanonicalField(data, 'quantity');
 
         const externalId = normaliseString(externalIdRaw);
         const type = normaliseType(typeRaw);
@@ -107,7 +93,12 @@ const processCSV = async (filePath, source, runId) => {
         try {
           // Bulk insert for efficiency; keep going on per-document errors.
           await Transaction.insertMany(results, { ordered: false });
-          resolve(results.length);
+          const invalidCount = results.reduce((acc, row) => acc + (row.isValid ? 0 : 1), 0);
+          resolve({
+            totalRows: results.length,
+            invalidRows: invalidCount,
+            validRows: results.length - invalidCount,
+          });
         } catch (error) {
           reject(error);
         }
