@@ -1,0 +1,22 @@
+{
+  "BITCOIN": "BTC",
+  "XBT": "BTC",
+
+  "ETHEREUM": "ETH",
+
+  "TETHER": "USDT",
+  "USD TETHER": "USDT",
+  "USDT-ERC20": "USDT",
+  "USDT-TRC20": "USDT",
+
+  "USD COIN": "USDC",
+  "USDC-ERC20": "USDC",
+
+  "BINANCE COIN": "BNB",
+  "BSC": "BNB",
+
+  "POLYGON": "MATIC",
+  "MATIC NETWORK": "MATIC",
+
+  "CHAINLINK": "LINK"
+}
